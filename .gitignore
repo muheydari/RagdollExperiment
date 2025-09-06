@@ -8,6 +8,12 @@ node_modules/
 /dist
 ragdoll-deploy/
 
+# Desktop app builds (large files - can be regenerated)
+desktop-app/win-unpacked/
+desktop-app/*.exe
+desktop-app/builder-*.yml
+desktop-app/builder-*.yaml
+
 # Environment variables
 .env
 .env.local

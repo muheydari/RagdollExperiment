@@ -8,7 +8,8 @@
     "cannon",
     "physics"
   ],
-  "main": "src/index.js",
+  "main": "public/electron.js",
+  "homepage": "./",
   "dependencies": {
     "@react-three/cannon": "6.3.0",
     "@react-three/drei": "^9.88.0",
@@ -22,12 +23,54 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test --env=jsdom",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "electron": "electron .",
+    "electron-dev": "ELECTRON_IS_DEV=true electron .",
+    "electron-pack": "electron-builder",
+    "preelectron-pack": "npm run build",
+    "build-desktop": "npm run build && electron-builder --win --x64 --dir",
+    "dist-desktop": "npm run build && electron-builder --win --x64"
   },
   "browserslist": [
     ">0.2%",
     "not dead",
     "not ie <= 11",
     "not op_mini all"
-  ]
+  ],
+  "build": {
+    "appId": "com.ragdoll.physics",
+    "productName": "Ragdoll Physics",
+    "directories": {
+      "output": "desktop-app"
+    },
+    "files": [
+      "build/**/*",
+      "public/electron.js",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "forceCodeSigning": false,
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "portable": {
+      "artifactName": "RagdollPhysics-Portable.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.12",
+    "electron-is-dev": "^3.0.1"
+  }
 }
