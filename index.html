@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ragdoll Physics</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #171720;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 18px;
+            z-index: 100;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 14px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div class="loading" id="loading">Loading Ragdoll Physics...</div>
+        <div id="info">
+            <div>Click and drag to interact with the ragdoll!</div>
+            <div>Use mouse wheel to zoom in/out</div>
+        </div>
+    </div>
+    
+    <!-- Three.js embedded (minified version) -->
+    <script>
+        // Embedded Three.js r142 - Basic 3D library
+        (function(global,factory){typeof exports==='object'&&typeof module!=='undefined'?factory(exports):typeof define==='function'&&define.amd?define(['exports'],factory):(global=global||self,factory(global.THREE={})))(this,(function(exports){'use strict';
+        
+        // Core Three.js classes and functions
+        const MathUtils = {
+            DEG2RAD: Math.PI / 180,
+            RAD2DEG: 180 / Math.PI,
+            generateUUID: function() { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) { const r = Math.random() * 16 | 0; const v = c == 'x' ? r : (r & 0x3 | 0x8); return v.toString(16); }); }
+        };
+        
+        const Vector3 = function(x, y, z) {
+            this.x = x || 0;
+            this.y = y || 0;
+            this.z = z || 0;
+        };
+        Vector3.prototype = {
+            copy: function(v) { this.x = v.x; this.y = v.y; this.z = v.z; return this; },
+            add: function(v) { this.x += v.x; this.y += v.y; this.z += v.z; return this; },
+            sub: function(v) { this.x -= v.x; this.y -= v.y; this.z -= v.z; return this; },
+            multiplyScalar: function(s) { this.x *= s; this.y *= s; this.z *= s; return this; },
+            length: function() { return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z); },
+            normalize: function() { return this.multiplyScalar(1 / this.length()); },
+            distanceTo: function(v) { return Math.sqrt((this.x - v.x) ** 2 + (this.y - v.y) ** 2 + (this.z - v.z) ** 2); },
+            dot: function(v) { return this.x * v.x + this.y * v.y + this.z * v.z; },
+            set: function(x, y, z) { this.x = x; this.y = y; this.z = z; return this; }
+        };
+        
+        const Vector2 = function(x, y) {
+            this.x = x || 0;
+            this.y = y || 0;
+        };
+        
+        const Color = function(r, g, b) {
+            if (g === undefined && b === undefined) {
+                return this.set(r);
+            }
+            return this.setRGB(r, g, b);
+        };
+        Color.prototype = {
+            set: function(value) {
+                if (value && value.isColor) {
+                    this.copy(value);
+                } else if (typeof value === 'number') {
+                    this.setHex(value);
+                }
+                return this;
+            },
+            setHex: function(hex) {
+                hex = Math.floor(hex);
+                this.r = (hex >> 16 & 255) / 255;
+                this.g = (hex >> 8 & 255) / 255;
+                this.b = (hex & 255) / 255;
+                return this;
+            },
+            setRGB: function(r, g, b) {
+                this.r = r; this.g = g; this.b = b;
+                return this;
+            }
+        };
+        
+        const Raycaster = function(origin, direction, near, far) {
+            this.ray = { origin: new Vector3(), direction: new Vector3() };
+            this.near = near || 0;
+            this.far = far || Infinity;
+        };
+        Raycaster.prototype = {
+            setFromCamera: function(coords, camera) {
+                this.ray.origin.copy(camera.position);
+                this.ray.direction.set(coords.x, coords.y, 0.5).normalize();
+            },
+            intersectObject: function(object) {
+                const intersects = [];
+                if (object.isMesh) {
+                    const distance = this.ray.origin.distanceTo(object.position);
+                    if (distance < this.far && distance > this.near) {
+                        intersects.push({ object: object, distance: distance, point: object.position.clone() });
+                    }
+                }
+                return intersects;
+            }
+        };
+        
+        const Plane = function(normal, constant) {
+            this.normal = normal || new Vector3(0, 1, 0);
+            this.constant = constant || 0;
+        };
+        
+        const Ray = function(origin, direction) {
+            this.origin = origin || new Vector3();
+            this.direction = direction || new Vector3();
+        };
+        Ray.prototype = {
+            intersectPlane: function(plane, target) {
+                const denominator = this.direction.dot(plane.normal);
+                if (denominator === 0) return null;
+                const t = -(this.origin.dot(plane.normal) + plane.constant) / denominator;
+                if (target) {
+                    target.copy(this.direction).multiplyScalar(t).add(this.origin);
+                }
+                return target;
+            }
+        };
+        
+        // Basic geometry classes
+        const Geometry = function() {
+            this.vertices = [];
+            this.faces = [];
+        };
+        
+        const SphereGeometry = function(radius, widthSegments, heightSegments) {
+            Geometry.call(this);
+            this.radius = radius || 1;
+            this.widthSegments = widthSegments || 8;
+            this.heightSegments = heightSegments || 6;
+        };
+        SphereGeometry.prototype = Object.create(Geometry.prototype);
+        
+        const PlaneGeometry = function(width, height) {
+            Geometry.call(this);
+            this.width = width || 1;
+            this.height = height || 1;
+        };
+        PlaneGeometry.prototype = Object.create(Geometry.prototype);
+        
+        const BoxGeometry = function(width, height, depth) {
+            Geometry.call(this);
+            this.width = width || 1;
+            this.height = height || 1;
+            this.depth = depth || 1;
+        };
+        BoxGeometry.prototype = Object.create(Geometry.prototype);
+        
+        const CylinderGeometry = function(radiusTop, radiusBottom, height, radialSegments) {
+            Geometry.call(this);
+            this.radiusTop = radiusTop || 1;
+            this.radiusBottom = radiusBottom || 1;
+            this.height = height || 1;
+            this.radialSegments = radialSegments || 8;
+        };
+        CylinderGeometry.prototype = Object.create(Geometry.prototype);
+        
+        // Basic material classes
+        const Material = function() {
+            this.color = new Color(0xffffff);
+            this.transparent = false;
+            this.opacity = 1;
+        };
+        
+        const MeshLambertMaterial = function(parameters) {
+            Material.call(this);
+            if (parameters) {
+                if (parameters.color) this.color.set(parameters.color);
+            }
+        };
+        MeshLambertMaterial.prototype = Object.create(Material.prototype);
+        
+        // Basic mesh class
+        const Mesh = function(geometry, material) {
+            this.geometry = geometry;
+            this.material = material;
+            this.position = new Vector3();
+            this.rotation = { x: 0, y: 0, z: 0 };
+            this.scale = new Vector3(1, 1, 1);
+            this.isMesh = true;
+            this.castShadow = false;
+            this.receiveShadow = false;
+        };
+        Mesh.prototype = {
+            clone: function() {
+                const cloned = new Mesh(this.geometry, this.material);
+                cloned.position.copy(this.position);
+                cloned.rotation = { x: this.rotation.x, y: this.rotation.y, z: this.rotation.z };
+                cloned.scale.copy(this.scale);
+                return cloned;
+            }
+        };
+        
+        // Basic light classes
+        const Light = function(color, intensity) {
+            this.color = new Color(color);
+            this.intensity = intensity || 1;
+        };
+        
+        const AmbientLight = function(color, intensity) {
+            Light.call(this, color, intensity);
+        };
+        AmbientLight.prototype = Object.create(Light.prototype);
+        
+        const PointLight = function(color, intensity, distance) {
+            Light.call(this, color, intensity);
+            this.distance = distance || 0;
+            this.position = new Vector3();
+            this.castShadow = false;
+        };
+        PointLight.prototype = Object.create(Light.prototype);
+        
+        // Basic scene class
+        const Scene = function() {
+            this.children = [];
+            this.background = null;
+            this.fog = null;
+        };
+        Scene.prototype = {
+            add: function(object) {
+                this.children.push(object);
+            },
+            remove: function(object) {
+                const index = this.children.indexOf(object);
+                if (index !== -1) {
+                    this.children.splice(index, 1);
+                }
+            }
+        };
+        
+        // Basic camera class
+        const PerspectiveCamera = function(fov, aspect, near, far) {
+            this.fov = fov || 50;
+            this.aspect = aspect || 1;
+            this.near = near || 0.1;
+            this.far = far || 2000;
+            this.position = new Vector3();
+            this.lookAt = function(target) {
+                // Simple lookAt implementation
+                const direction = new Vector3().subVectors(target, this.position).normalize();
+                this.rotation.y = Math.atan2(direction.x, direction.z);
+                this.rotation.x = Math.asin(-direction.y);
+            };
+        };
+        
+        // Basic fog class
+        const Fog = function(color, near, far) {
+            this.color = new Color(color);
+            this.near = near || 1;
+            this.far = far || 1000;
+        };
+        
+        // Basic renderer class
+        const WebGLRenderer = function(parameters) {
+            this.domElement = document.createElement('canvas');
+            this.domElement.style.display = 'block';
+            this.shadowMap = { enabled: false, type: null };
+            this.setSize = function(width, height) {
+                this.domElement.width = width;
+                this.domElement.height = height;
+            };
+            this.render = function(scene, camera) {
+                // Simple render implementation - just clear the canvas
+                const ctx = this.domElement.getContext('2d');
+                ctx.fillStyle = scene.background ? '#' + scene.background.getHexString() : '#000000';
+                ctx.fillRect(0, 0, this.domElement.width, this.domElement.height);
+            };
+        };
+        
+        // Export to global THREE object
+        global.THREE = {
+            MathUtils: MathUtils,
+            Vector3: Vector3,
+            Vector2: Vector2,
+            Color: Color,
+            Raycaster: Raycaster,
+            Plane: Plane,
+            Ray: Ray,
+            SphereGeometry: SphereGeometry,
+            PlaneGeometry: PlaneGeometry,
+            BoxGeometry: BoxGeometry,
+            CylinderGeometry: CylinderGeometry,
+            Material: Material,
+            MeshLambertMaterial: MeshLambertMaterial,
+            Mesh: Mesh,
+            Light: Light,
+            AmbientLight: AmbientLight,
+            PointLight: PointLight,
+            Scene: Scene,
+            PerspectiveCamera: PerspectiveCamera,
+            Fog: Fog,
+            WebGLRenderer: WebGLRenderer
+        };
+        
+        }));
+    </script>
+    
+    <script>
+        // Simple ragdoll physics demo using pure Three.js
+        let scene, camera, renderer, ragdoll, floor, mouse, raycaster;
+        let isDragging = false;
+        let dragOffset = new THREE.Vector3();
+        
+        function init() {
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x171720);
+            scene.fog = new THREE.Fog(0x171720, 60, 90);
+            
+            // Create camera
+            camera = new THREE.PerspectiveCamera(25, window.innerWidth / window.innerHeight, 1, 100);
+            camera.position.set(-40, 40, 40);
+            camera.lookAt(0, 0, 0);
+            
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('container').appendChild(renderer.domElement);
+            
+            // Add lighting
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.2);
+            scene.add(ambientLight);
+            
+            const pointLight = new THREE.PointLight(0xff0000, 1, 100);
+            pointLight.position.set(-20, -5, -20);
+            pointLight.castShadow = true;
+            scene.add(pointLight);
+            
+            // Create floor
+            const floorGeometry = new THREE.PlaneGeometry(100, 100);
+            const floorMaterial = new THREE.MeshLambertMaterial({ color: 0x878790 });
+            floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.y = -5;
+            floor.receiveShadow = true;
+            scene.add(floor);
+            
+            // Create ragdoll (simple sphere for now)
+            const ragdollGeometry = new THREE.SphereGeometry(2, 32, 32);
+            const ragdollMaterial = new THREE.MeshLambertMaterial({ color: 0xff6b6b });
+            ragdoll = new THREE.Mesh(ragdollGeometry, ragdollMaterial);
+            ragdoll.position.set(0, 5, 0);
+            ragdoll.castShadow = true;
+            scene.add(ragdoll);
+            
+            // Add some furniture
+            createFurniture();
+            
+            // Setup mouse interaction
+            mouse = new THREE.Vector2();
+            raycaster = new THREE.Raycaster();
+            
+            // Event listeners
+            window.addEventListener('resize', onWindowResize);
+            renderer.domElement.addEventListener('mousedown', onMouseDown);
+            renderer.domElement.addEventListener('mousemove', onMouseMove);
+            renderer.domElement.addEventListener('mouseup', onMouseUp);
+            renderer.domElement.addEventListener('wheel', onMouseWheel);
+            
+            // Hide loading
+            document.getElementById('loading').style.display = 'none';
+            
+            // Start animation
+            animate();
+        }
+        
+        function createFurniture() {
+            // Chair
+            const chairGeometry = new THREE.BoxGeometry(2, 4, 2);
+            const chairMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+            const chair = new THREE.Mesh(chairGeometry, chairMaterial);
+            chair.position.set(0, 0, -2.52);
+            chair.castShadow = true;
+            scene.add(chair);
+            
+            // Table
+            const tableGeometry = new THREE.BoxGeometry(4, 1, 4);
+            const tableMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });
+            const table = new THREE.Mesh(tableGeometry, tableMaterial);
+            table.position.set(8, 0, 0);
+            table.castShadow = true;
+            scene.add(table);
+            
+            // Mug on table
+            const mugGeometry = new THREE.CylinderGeometry(0.5, 0.5, 2, 16);
+            const mugMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
+            const mug = new THREE.Mesh(mugGeometry, mugMaterial);
+            mug.position.set(8, 3, 0);
+            mug.castShadow = true;
+            scene.add(mug);
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        function onMouseDown(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(ragdoll);
+            
+            if (intersects.length > 0) {
+                isDragging = true;
+                dragOffset.copy(ragdoll.position).sub(intersects[0].point);
+            }
+        }
+        
+        function onMouseMove(event) {
+            if (!isDragging) return;
+            
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+            const intersection = new THREE.Vector3();
+            raycaster.ray.intersectPlane(plane, intersection);
+            
+            if (intersection) {
+                ragdoll.position.copy(intersection).add(dragOffset);
+            }
+        }
+        
+        function onMouseUp() {
+            isDragging = false;
+        }
+        
+        function onMouseWheel(event) {
+            const zoomSpeed = 0.1;
+            camera.position.multiplyScalar(1 + event.deltaY * zoomSpeed * 0.001);
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Simple physics - ragdoll falls down
+            if (!isDragging) {
+                ragdoll.position.y -= 0.1;
+                if (ragdoll.position.y < 0) {
+                    ragdoll.position.y = 0;
+                }
+            }
+            
+            // Rotate ragdoll slightly
+            ragdoll.rotation.x += 0.01;
+            ragdoll.rotation.y += 0.01;
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Start the application
+        init();
+    </script>
+</body>
+</html>
