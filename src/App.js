@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { MeshReflectorMaterial } from '@react-three/drei'
 import { Physics, usePlane } from '@react-three/cannon'
@@ -6,6 +7,22 @@ import { Guy } from './components/Guy'
 import { Mug, Chair, Table, Lamp } from './components/Furniture'
 
 export default function App() {
+  const [visualizationEnabled, setVisualizationEnabled] = useState(false)
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key.toLowerCase() === 'v') {
+        setVisualizationEnabled(prev => !prev)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
+
   return (
     <Canvas dpr={[1, 2]} shadows camera={{ position: [-40, 40, 40], fov: 25, near: 1, far: 100 }}>
       <color attach="background" args={['#2a2a3a']} />
@@ -24,7 +41,7 @@ export default function App() {
       />
       <Physics allowSleep={false} iterations={15} gravity={[0, -200, 0]}>
         <Cursor />
-        <Guy rotation={[-Math.PI / 3, 0, 0]} />
+        <Guy rotation={[-Math.PI / 3, 0, 0]} visualizationEnabled={visualizationEnabled} />
         <Floor position={[0, -5, 0]} rotation={[-Math.PI / 2, 0, 0]} />
         <Chair position={[0, 0, -2.52]} />
         <Table position={[8, 0, 0]} />

@@ -5,11 +5,12 @@ import { createRagdoll } from '../helpers/createRagdoll'
 import { useDragConstraint } from '../helpers/Drag'
 import { Block } from '../helpers/Block'
 import { VelocityIndicator } from './VelocityIndicator'
+import { MassIndicator } from './MassIndicator'
 
 const { shapes, joints } = createRagdoll(5.5, Math.PI / 16, Math.PI / 16, 0)
 const context = createContext()
 
-const BodyPart = ({ config, children, render, name, ...props }) => {
+const BodyPart = ({ config, children, render, name, visualizationEnabled, ...props }) => {
   const { color, args, mass, position } = shapes[name]
   const parent = useContext(context)
   const [ref, api] = useBox(() => ({ mass, args, position, linearDamping: 0.99, ...props }))
@@ -21,7 +22,9 @@ const BodyPart = ({ config, children, render, name, ...props }) => {
         {render}
       </Block>
       {/* Render velocity indicator outside of Block to position it in world space */}
-      <VelocityIndicator physicsApi={api} />
+      {visualizationEnabled && <VelocityIndicator physicsApi={api} />}
+      {/* Render mass indicator above the bone */}
+      {visualizationEnabled && <MassIndicator physicsApi={api} mass={mass} name={name} />}
       {children}
     </context.Provider>
   )
@@ -45,22 +48,22 @@ function Face() {
   )
 }
 
-export function Guy(props) {
+export function Guy({ visualizationEnabled, ...props }) {
   return (
-    <BodyPart name="upperBody" {...props}>
-      <BodyPart {...props} name="head" config={joints['neckJoint']} render={<Face />} />
-      <BodyPart {...props} name="upperLeftArm" config={joints['leftShoulder']}>
-        <BodyPart {...props} name="lowerLeftArm" config={joints['leftElbowJoint']} />
+    <BodyPart name="upperBody" visualizationEnabled={visualizationEnabled} {...props}>
+      <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="head" config={joints['neckJoint']} render={<Face />} />
+      <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="upperLeftArm" config={joints['leftShoulder']}>
+        <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="lowerLeftArm" config={joints['leftElbowJoint']} />
       </BodyPart>
-      <BodyPart {...props} name="upperRightArm" config={joints['rightShoulder']}>
-        <BodyPart {...props} name="lowerRightArm" config={joints['rightElbowJoint']} />
+      <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="upperRightArm" config={joints['rightShoulder']}>
+        <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="lowerRightArm" config={joints['rightElbowJoint']} />
       </BodyPart>
-      <BodyPart {...props} name="pelvis" config={joints['spineJoint']}>
-        <BodyPart {...props} name="upperLeftLeg" config={joints['leftHipJoint']}>
-          <BodyPart {...props} name="lowerLeftLeg" config={joints['leftKneeJoint']} />
+      <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="pelvis" config={joints['spineJoint']}>
+        <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="upperLeftLeg" config={joints['leftHipJoint']}>
+          <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="lowerLeftLeg" config={joints['leftKneeJoint']} />
         </BodyPart>
-        <BodyPart {...props} name="upperRightLeg" config={joints['rightHipJoint']}>
-          <BodyPart {...props} name="lowerRightLeg" config={joints['rightKneeJoint']} />
+        <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="upperRightLeg" config={joints['rightHipJoint']}>
+          <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="lowerRightLeg" config={joints['rightKneeJoint']} />
         </BodyPart>
       </BodyPart>
     </BodyPart>
