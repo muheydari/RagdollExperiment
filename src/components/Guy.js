@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef } from 'react'
+import React, { createContext, useContext, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useBox, useConeTwistConstraint } from '@react-three/cannon'
 import { createRagdoll } from '../helpers/createRagdoll'
@@ -6,29 +6,10 @@ import { useDragConstraint } from '../helpers/Drag'
 import { Block } from '../helpers/Block'
 import { VelocityIndicator } from './VelocityIndicator'
 import { MassIndicator } from './MassIndicator'
+import { HingeIndicator } from './HingeIndicator'
 
 const { shapes, joints } = createRagdoll(5.5, Math.PI / 16, Math.PI / 16, 0)
 const context = createContext()
-
-const BodyPart = ({ config, children, render, name, visualizationEnabled, ...props }) => {
-  const { color, args, mass, position } = shapes[name]
-  const parent = useContext(context)
-  const [ref, api] = useBox(() => ({ mass, args, position, linearDamping: 0.99, ...props }))
-  useConeTwistConstraint(ref, parent, config)
-  const bind = useDragConstraint(ref)
-  return (
-    <context.Provider value={ref}>
-      <Block castShadow receiveShadow ref={ref} {...props} {...bind} scale={args} name={name} color={color}>
-        {render}
-      </Block>
-      {/* Render velocity indicator outside of Block to position it in world space */}
-      {visualizationEnabled && <VelocityIndicator physicsApi={api} />}
-      {/* Render mass indicator above the bone */}
-      {visualizationEnabled && <MassIndicator physicsApi={api} mass={mass} name={name} />}
-      {children}
-    </context.Provider>
-  )
-}
 
 function Face() {
   const mouth = useRef()
@@ -48,24 +29,136 @@ function Face() {
   )
 }
 
-export function Guy({ visualizationEnabled, ...props }) {
+// Enhanced BodyPart wrapper that tracks its own API for passing to children
+const BodyPart = ({ config, children, render, name, visualizationMode, parentApi, ...props }) => {
+  const { color, args, mass, position } = shapes[name]
+  const parent = useContext(context)
+  const [ref, api] = useBox(() => ({ mass, args, position, linearDamping: 0.99, ...props }))
+  useConeTwistConstraint(ref, parent, config)
+  const bind = useDragConstraint(ref)
+  
   return (
-    <BodyPart name="upperBody" visualizationEnabled={visualizationEnabled} {...props}>
-      <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="head" config={joints['neckJoint']} render={<Face />} />
-      <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="upperLeftArm" config={joints['leftShoulder']}>
-        <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="lowerLeftArm" config={joints['leftElbowJoint']} />
-      </BodyPart>
-      <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="upperRightArm" config={joints['rightShoulder']}>
-        <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="lowerRightArm" config={joints['rightElbowJoint']} />
-      </BodyPart>
-      <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="pelvis" config={joints['spineJoint']}>
-        <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="upperLeftLeg" config={joints['leftHipJoint']}>
-          <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="lowerLeftLeg" config={joints['leftKneeJoint']} />
-        </BodyPart>
-        <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="upperRightLeg" config={joints['rightHipJoint']}>
-          <BodyPart {...props} visualizationEnabled={visualizationEnabled} name="lowerRightLeg" config={joints['rightKneeJoint']} />
-        </BodyPart>
-      </BodyPart>
+    <context.Provider value={ref}>
+      <Block castShadow receiveShadow ref={ref} {...props} {...bind} scale={args} name={name} color={color}>
+        {render}
+      </Block>
+      {/* Render physics indicators when in physics mode */}
+      {visualizationMode === 'physics' && (
+        <>
+          <VelocityIndicator physicsApi={api} />
+          <MassIndicator physicsApi={api} mass={mass} name={name} />
+        </>
+      )}
+      {/* Render hinge indicator when in hinges mode and there's a parent connection */}
+      {visualizationMode === 'hinges' && config && parentApi && (
+        <HingeIndicator 
+          parentPhysicsApi={parentApi} 
+          childPhysicsApi={api} 
+          jointConfig={config}
+          jointName={name}
+        />
+      )}
+      {/* Pass this component's API as parentApi to children */}
+      {typeof children === 'function' ? children(api) : children}
+    </context.Provider>
+  )
+}
+
+export function Guy({ visualizationMode, ...props }) {
+  return (
+    <BodyPart name="upperBody" visualizationMode={visualizationMode} {...props}>
+      {(upperBodyApi) => (
+        <>
+          <BodyPart 
+            {...props} 
+            visualizationMode={visualizationMode} 
+            name="head" 
+            config={joints['neckJoint']} 
+            parentApi={upperBodyApi}
+            render={<Face />} 
+          />
+          <BodyPart 
+            {...props} 
+            visualizationMode={visualizationMode} 
+            name="upperLeftArm" 
+            config={joints['leftShoulder']}
+            parentApi={upperBodyApi}
+          >
+            {(upperLeftArmApi) => (
+              <BodyPart 
+                {...props} 
+                visualizationMode={visualizationMode} 
+                name="lowerLeftArm" 
+                config={joints['leftElbowJoint']}
+                parentApi={upperLeftArmApi}
+              />
+            )}
+          </BodyPart>
+          <BodyPart 
+            {...props} 
+            visualizationMode={visualizationMode} 
+            name="upperRightArm" 
+            config={joints['rightShoulder']}
+            parentApi={upperBodyApi}
+          >
+            {(upperRightArmApi) => (
+              <BodyPart 
+                {...props} 
+                visualizationMode={visualizationMode} 
+                name="lowerRightArm" 
+                config={joints['rightElbowJoint']}
+                parentApi={upperRightArmApi}
+              />
+            )}
+          </BodyPart>
+          <BodyPart 
+            {...props} 
+            visualizationMode={visualizationMode} 
+            name="pelvis" 
+            config={joints['spineJoint']}
+            parentApi={upperBodyApi}
+          >
+            {(pelvisApi) => (
+              <>
+                <BodyPart 
+                  {...props} 
+                  visualizationMode={visualizationMode} 
+                  name="upperLeftLeg" 
+                  config={joints['leftHipJoint']}
+                  parentApi={pelvisApi}
+                >
+                  {(upperLeftLegApi) => (
+                    <BodyPart 
+                      {...props} 
+                      visualizationMode={visualizationMode} 
+                      name="lowerLeftLeg" 
+                      config={joints['leftKneeJoint']}
+                      parentApi={upperLeftLegApi}
+                    />
+                  )}
+                </BodyPart>
+                <BodyPart 
+                  {...props} 
+                  visualizationMode={visualizationMode} 
+                  name="upperRightLeg" 
+                  config={joints['rightHipJoint']}
+                  parentApi={pelvisApi}
+                >
+                  {(upperRightLegApi) => (
+                    <BodyPart 
+                      {...props} 
+                      visualizationMode={visualizationMode} 
+                      name="lowerRightLeg" 
+                      config={joints['rightKneeJoint']}
+                      parentApi={upperRightLegApi}
+                    />
+                  )}
+                </BodyPart>
+              </>
+            )}
+          </BodyPart>
+        </>
+      )}
     </BodyPart>
   )
 }
